@@ -5,8 +5,6 @@ use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Color, DrawParam};
 use ggez::{Context, ContextBuilder, GameResult, glam};
 
-struct Upgrade {}
-
 //Add rate and upgrades
 struct Element {
     name: String,
@@ -21,6 +19,7 @@ struct Currency {
     auto_gatherer: u32,
 }
 
+const AUTO_CURREN_INITIAL_RATE: u64 = 10;
 // add a field called upgrades: [Upgrade; 3]
 impl Currency {
     fn new() -> Currency {
@@ -32,8 +31,8 @@ impl Currency {
         }
     }
 
-    fn num_money(&self) -> &u64 {
-        &self.money
+    fn num_money(&self) -> u64 {
+        self.money
     }
 
     fn collect_money(&mut self) {
@@ -41,7 +40,7 @@ impl Currency {
     }
 
     fn update_money_auto(&mut self, time_passed: u64) {
-        self.money += self.click_rate * time_passed;
+        self.money += self.auto_rate * u64::from(self.auto_gatherer) * time_passed;
     }
 
     fn auto_coll(&self) -> bool {
@@ -49,11 +48,11 @@ impl Currency {
     }
 
     fn can_buy_auto(&self) -> bool {
-        self.money > 20
+        self.money >= AUTO_CURREN_INITIAL_RATE
     }
 
     fn auto_gatherer_buy(&mut self) {
-        self.money -= 20;
+        self.money -= AUTO_CURREN_INITIAL_RATE;
         self.auto_gatherer += 1;
     }
 }

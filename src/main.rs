@@ -1,96 +1,241 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Local};
 use ggegui::egui::ScrollArea;
 use ggegui::{Gui, egui};
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Color, DrawParam};
 use ggez::{Context, ContextBuilder, GameResult, glam};
+use rust_decimal::prelude::*;
 
-//Add rate and upgrades
-struct Element {
+pub trait Detail {
+    fn check_name(&self) -> &str;
+    fn check_quantity(&self) -> u64;
+}
+
+pub trait Increment {}
+
+pub trait Cost {
+    fn check_cost(&self) -> Decimal;
+    fn obtain_new_cost(&mut self);
+}
+
+//************************************************************** */
+// Upgrade functionality
+/**************************************************************** */
+const ADD_UPG_RATE: Decimal = dec!(1.05);
+const MULT_UPG_RATE: Decimal = dec!(1.9);
+const EXP_UPG_RATE: Decimal = dec!(1.14);
+
+enum UpgradeEffect {
+    Additive,
+    Multiplicative,
+    Exponential,
+}
+
+pub struct Upgrade {
+    generator_id: GeneratorID,
     name: String,
-    number: u8,
-    amount: u64,
+    effect: UpgradeEffect,
+    quantity: u64,
+    base_cost: Decimal,
+    current_cost: Decimal,
 }
 
-struct Currency {
-    money: u64,
-    click_rate: u64,
-    auto_rate: u64,
-    auto_gatherer: u32,
-}
-
-const AUTO_CURREN_INITIAL_RATE: u64 = 10;
-// add a field called upgrades: [Upgrade; 3]
-impl Currency {
-    fn new() -> Currency {
-        Currency {
-            money: 0,
-            click_rate: 1,
-            auto_rate: 1,
-            auto_gatherer: 0,
-        }
+impl Detail for Upgrade {
+    fn check_name(&self) -> &str {
+        &self.name
     }
 
-    fn num_money(&self) -> u64 {
-        self.money
-    }
-
-    fn collect_money(&mut self) {
-        self.money += self.click_rate;
-    }
-
-    fn update_money_auto(&mut self, time_passed: u64) {
-        self.money += self.auto_rate * u64::from(self.auto_gatherer) * time_passed;
-    }
-
-    fn auto_coll(&self) -> bool {
-        self.auto_gatherer != 0
-    }
-
-    fn can_buy_auto(&self) -> bool {
-        self.money >= AUTO_CURREN_INITIAL_RATE
-    }
-
-    fn auto_gatherer_buy(&mut self) {
-        self.money -= AUTO_CURREN_INITIAL_RATE;
-        self.auto_gatherer += 1;
+    fn check_quantity(&self) -> u64 {
+        self.quantity
     }
 }
 
-struct GameState {
-    gui: Gui,
-    currency: Currency,
+impl Cost for Upgrade {
+    fn check_cost(&self) -> Decimal {
+        self.current_cost
+    }
+
+    fn obtain_new_cost(&mut self) {
+        let rate = match self.effect {
+            UpgradeEffect::Additive => ADD_UPG_RATE,
+            UpgradeEffect::Multiplicative => MULT_UPG_RATE,
+            UpgradeEffect::Exponential => EXP_UPG_RATE,
+        };
+
+        self.current_cost = self.base_cost * rate.powu(self.quantity)
+    }
+}
+//************************************************************************************************ */
+// Resource Manager
+//************************************************************************************************ */
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+enum GeneratorID {
+    Clicker,
+    AutoClicker,
+}
+
+struct Generator {
+    generator_id: GeneratorID,
+    name: String,
+    quantity: u64,
+    production_rate: Decimal,
+}
+
+impl Generator {
+    fn check_generator_id(&self) -> GeneratorID {
+        self.generator_id
+    }
+
+    fn check_name(&self) -> &str {
+        &self.name
+    }
+
+    fn check_quantity(&self) -> u64 {
+        self.quantity
+    }
+
+    fn increment_quantity(&mut self) {
+        self.quantity += 1;
+    }
+
+    fn calculate_production(&self) -> Decimal {
+        self.production_rate
+    }
+}
+
+struct ResourceManager {
+    electrons: Decimal,
+    generators: Vec<Generator>,
+    upgrades: HashMap<GeneratorID, Vec<Upgrade>>,
     time: DateTime<Local>,
-    elements: Vec<Element>,
-    elements_unlckd: usize,
 }
 
-impl GameState {
-    pub fn new(ctx: &mut Context) -> GameState {
-        //obtain the names of the elements and atomic numbers.
-        let iter = (1..40).map(|x| Element {
-            name: format!("Element {}", x),
-            number: x,
-            amount: 0,
-        });
-        // Load/create resources such as images here.
-        GameState {
-            gui: Gui::new(ctx),
-            currency: Currency::new(),
+impl ResourceManager {
+    fn new() -> ResourceManager {
+        let generator_vec = vec![
+            Generator {
+                generator_id: GeneratorID::Clicker,
+                name: String::from("Scoop"),
+                quantity: 1,
+                production_rate: dec!(1),
+            },
+            Generator {
+                generator_id: GeneratorID::AutoClicker,
+                name: String::from("AutoScooper"),
+                quantity: 0,
+                production_rate: dec!(1),
+            },
+        ];
+
+        let mut upgrade_hashmap = HashMap::new();
+
+        upgrade_hashmap.insert(
+            GeneratorID::Clicker,
+            vec![Upgrade {
+                generator_id: GeneratorID::Clicker,
+                name: String::from("Even More"),
+                effect: UpgradeEffect::Additive,
+                quantity: 0,
+                base_cost: dec!(15),
+                current_cost: dec!(15),
+            }],
+        );
+
+        upgrade_hashmap.insert(
+            GeneratorID::Clicker,
+            vec![
+                Upgrade {
+                    generator_id: GeneratorID::AutoClicker,
+                    name: String::from("AutoScooper"),
+                    effect: UpgradeEffect::Additive,
+                    quantity: 0,
+                    base_cost: dec!(15),
+                    current_cost: dec!(15),
+                },
+                Upgrade {
+                    generator_id: GeneratorID::AutoClicker,
+                    name: String::from("Multiplier"),
+                    effect: UpgradeEffect::Multiplicative,
+                    quantity: 0,
+                    base_cost: dec!(30),
+                    current_cost: dec!(30),
+                },
+            ],
+        );
+
+        ResourceManager {
+            electrons: dec!(0),
+            generators: generator_vec,
+            upgrades: upgrade_hashmap,
             time: chrono::Local::now(),
-            elements: Vec::from_iter(iter),
-            elements_unlckd: 10,
         }
     }
 
-    pub fn calculate_seconds_passed(&mut self) -> u64 {
+    fn electron_quantity(&self) -> Decimal {
+        self.electrons
+    }
+
+    fn clicker_increment(&mut self) {
+        self.electrons += self.generators[0].calculate_production()
+    }
+
+    fn update_time(&mut self) {
+        self.time = chrono::Local::now();
+    }
+
+    fn calculate_seconds_passed(&mut self) -> u64 {
         let time = (self.time - chrono::Local::now())
             .num_seconds()
             .unsigned_abs();
         if time >= 1 {
-            self.time = chrono::Local::now();
+            self.update();
         }
         time
+    }
+
+    pub fn can_buy_generator(&self) -> bool {
+        todo!()
+    }
+
+    pub fn can_buy_upgrade(&self, index: usize) -> bool {
+        todo!()
+    }
+
+    pub fn update(&mut self) {
+        let generators = self
+            .generators
+            .iter()
+            .filter(|&x| x.check_generator_id() != GeneratorID::Clicker && x.check_quantity() != 0);
+        for generator in generators {
+            self.electrons += generator.calculate_production()
+        }
+    }
+}
+
+struct Currency {
+    balance: u64,
+    click_rate: u64,
+    auto_rate: u64,
+    auto_gatherers: u32,
+}
+
+struct GameState {
+    gui: Gui,
+    resource_manager: ResourceManager,
+}
+
+impl GameState {
+    pub fn new(ctx: &mut Context) -> GameState {
+        GameState {
+            gui: Gui::new(ctx),
+            resource_manager: ResourceManager::new(),
+        }
+    }
+
+    pub fn purchase_upgrade(&mut self, index: usize) {
+        todo!()
     }
 }
 
@@ -98,52 +243,22 @@ impl EventHandler for GameState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let gui_ctx = self.gui.ctx();
 
-        if self.currency.auto_coll() {
-            let time_passed = self.calculate_seconds_passed();
-            self.currency.update_money_auto(time_passed);
-        }
+        self.resource_manager.update();
 
         egui::TopBottomPanel::top("top_panel")
             .min_height(120.0)
             .show(&gui_ctx, |ui| {
                 ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
                     ui.heading("Collect Money");
-                    ui.label(self.currency.num_money().to_string());
+                    ui.label(self.resource_manager.electron_quantity().to_string());
                     if ui.button("Click").clicked() {
-                        self.currency.collect_money();
+                        self.resource_manager.clicker_increment();
                     }
-                    ui.add_enabled_ui(self.currency.can_buy_auto(), |ui| {
-                        if ui.button("Buy auto collector").clicked() {
-                            self.currency.auto_gatherer_buy();
-                        }
-                    });
                 });
             });
 
         egui::CentralPanel::default().show(&gui_ctx, |ui| {
             ui.heading("The Elements are here");
-            ui.with_layout(
-                egui::Layout::top_down_justified(egui::Align::TOP).with_cross_justify(true),
-                |ui| {
-                    ScrollArea::vertical()
-                        .stick_to_right(true)
-                        .max_width(300.0)
-                        .show(ui, |ui| {
-                            ui.separator();
-                            for elem in &self.elements[0..self.elements_unlckd] {
-                                ui.horizontal(|ui| {
-                                    ui.label(&elem.name);
-                                    ui.label(elem.amount.to_string());
-                                });
-                                ui.horizontal(|ui| {
-                                    if ui.button("Button 1").clicked() {}
-                                    if ui.button("Button 2").clicked() {}
-                                });
-                                ui.separator();
-                            }
-                        });
-                },
-            );
         });
 
         self.gui.update(ctx);

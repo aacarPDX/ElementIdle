@@ -13,8 +13,6 @@ pub trait Detail {
     fn check_quantity(&self) -> u64;
 }
 
-pub trait Increment {}
-
 pub trait Cost {
     fn check_cost(&self) -> Decimal;
     fn obtain_new_cost(&mut self);
@@ -40,6 +38,12 @@ pub struct Upgrade {
     quantity: u64,
     base_cost: Decimal,
     current_cost: Decimal,
+}
+
+impl Upgrade {
+    fn check_intended_generator(&self) -> GeneratorID {
+        self.generator_id
+    }
 }
 
 impl Detail for Upgrade {
@@ -88,14 +92,6 @@ impl Generator {
         self.generator_id
     }
 
-    fn check_name(&self) -> &str {
-        &self.name
-    }
-
-    fn check_quantity(&self) -> u64 {
-        self.quantity
-    }
-
     fn increment_quantity(&mut self) {
         self.quantity += 1;
     }
@@ -105,10 +101,19 @@ impl Generator {
     }
 }
 
+impl Detail for Generator {
+    fn check_name(&self) -> &str {
+        &self.name
+    }
+
+    fn check_quantity(&self) -> u64 {
+        self.quantity
+    }
+}
+
 struct ResourceManager {
     electrons: Decimal,
     generators: Vec<Generator>,
-    upgrades: HashMap<GeneratorID, Vec<Upgrade>>,
     time: DateTime<Local>,
 }
 
@@ -129,46 +134,9 @@ impl ResourceManager {
             },
         ];
 
-        let mut upgrade_hashmap = HashMap::new();
-
-        upgrade_hashmap.insert(
-            GeneratorID::Clicker,
-            vec![Upgrade {
-                generator_id: GeneratorID::Clicker,
-                name: String::from("Even More"),
-                effect: UpgradeEffect::Additive,
-                quantity: 0,
-                base_cost: dec!(15),
-                current_cost: dec!(15),
-            }],
-        );
-
-        upgrade_hashmap.insert(
-            GeneratorID::Clicker,
-            vec![
-                Upgrade {
-                    generator_id: GeneratorID::AutoClicker,
-                    name: String::from("AutoScooper"),
-                    effect: UpgradeEffect::Additive,
-                    quantity: 0,
-                    base_cost: dec!(15),
-                    current_cost: dec!(15),
-                },
-                Upgrade {
-                    generator_id: GeneratorID::AutoClicker,
-                    name: String::from("Multiplier"),
-                    effect: UpgradeEffect::Multiplicative,
-                    quantity: 0,
-                    base_cost: dec!(30),
-                    current_cost: dec!(30),
-                },
-            ],
-        );
-
         ResourceManager {
             electrons: dec!(0),
             generators: generator_vec,
-            upgrades: upgrade_hashmap,
             time: chrono::Local::now(),
         }
     }
@@ -214,28 +182,46 @@ impl ResourceManager {
     }
 }
 
-struct Currency {
-    balance: u64,
-    click_rate: u64,
-    auto_rate: u64,
-    auto_gatherers: u32,
-}
-
 struct GameState {
     gui: Gui,
+    upgrades: Vec<Upgrade>,
     resource_manager: ResourceManager,
 }
 
 impl GameState {
     pub fn new(ctx: &mut Context) -> GameState {
+        let upgrade_vector = vec![
+            Upgrade {
+                generator_id: GeneratorID::Clicker,
+                name: String::from("Even More"),
+                effect: UpgradeEffect::Additive,
+                quantity: 0,
+                base_cost: dec!(15),
+                current_cost: dec!(15),
+            },
+            Upgrade {
+                generator_id: GeneratorID::AutoClicker,
+                name: String::from("AutoScooper"),
+                effect: UpgradeEffect::Additive,
+                quantity: 0,
+                base_cost: dec!(15),
+                current_cost: dec!(15),
+            },
+            Upgrade {
+                generator_id: GeneratorID::AutoClicker,
+                name: String::from("Multiplier"),
+                effect: UpgradeEffect::Multiplicative,
+                quantity: 0,
+                base_cost: dec!(30),
+                current_cost: dec!(30),
+            },
+        ];
+
         GameState {
             gui: Gui::new(ctx),
             resource_manager: ResourceManager::new(),
+            upgrades: upgrade_vector,
         }
-    }
-
-    pub fn purchase_upgrade(&mut self, index: usize) {
-        todo!()
     }
 }
 
@@ -245,20 +231,27 @@ impl EventHandler for GameState {
 
         self.resource_manager.update();
 
-        egui::TopBottomPanel::top("top_panel")
-            .min_height(120.0)
+        egui::SidePanel::right("Upgrades panel")
+            .min_width(300.0)
             .show(&gui_ctx, |ui| {
-                ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
-                    ui.heading("Collect Money");
-                    ui.label(self.resource_manager.electron_quantity().to_string());
-                    if ui.button("Click").clicked() {
-                        self.resource_manager.clicker_increment();
-                    }
+                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    ui.heading("Upgrades");
+                    let clicker_upgrade = self
+                        .upgrades
+                        .iter()
+                        .filter(|x| x.check_intended_generator() == GeneratorID::Clicker);
+                    
                 });
             });
 
         egui::CentralPanel::default().show(&gui_ctx, |ui| {
-            ui.heading("The Elements are here");
+            ui.vertical(|ui| {
+                ui.heading("Collect Money");
+                ui.label(self.resource_manager.electron_quantity().to_string());
+                if ui.button("Click").clicked() {
+                    self.resource_manager.clicker_increment();
+                }
+            });
         });
 
         self.gui.update(ctx);

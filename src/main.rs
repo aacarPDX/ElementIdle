@@ -1,7 +1,4 @@
-use std::collections::HashMap;
-
 use chrono::{DateTime, Local};
-use ggegui::egui::ScrollArea;
 use ggegui::{Gui, egui};
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Color, DrawParam};
@@ -163,12 +160,8 @@ impl ResourceManager {
         time
     }
 
-    pub fn can_buy_generator(&self) -> bool {
-        todo!()
-    }
-
-    pub fn can_buy_upgrade(&self, index: usize) -> bool {
-        todo!()
+    pub fn can_buy(&self, cost: Decimal) -> bool {
+        self.electrons >= cost
     }
 
     pub fn update(&mut self) {
@@ -223,6 +216,10 @@ impl GameState {
             upgrades: upgrade_vector,
         }
     }
+
+    fn is_purchase_possible(&self, cost: Decimal) -> bool {
+        self.resource_manager.can_buy(cost)
+    }
 }
 
 impl EventHandler for GameState {
@@ -241,7 +238,16 @@ impl EventHandler for GameState {
                         ui.horizontal(|ui| {
                             ui.label("Cost:");
                             ui.label(i.check_cost().to_string());
-                            ui.label("Electrons")
+                            ui.label("Electrons");
+                            ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
+                                ui.add_enabled_ui(
+                                    self.is_purchase_possible(i.check_cost()),
+                                    |ui| {
+                                        if ui.button("Purchase").clicked() {
+                                        }
+                                    },
+                                );
+                            });
                         });
                     }
                 });

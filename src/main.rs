@@ -193,7 +193,7 @@ impl GameState {
         let upgrade_vector = vec![
             Upgrade {
                 generator_id: GeneratorID::Clicker,
-                name: String::from("Even More"),
+                name: String::from("Even More: Increase Electrons Per Click"),
                 effect: UpgradeEffect::Additive,
                 quantity: 0,
                 base_cost: dec!(15),
@@ -201,7 +201,7 @@ impl GameState {
             },
             Upgrade {
                 generator_id: GeneratorID::AutoClicker,
-                name: String::from("AutoScooper"),
+                name: String::from("AutoScooper: Add AutoScooper"),
                 effect: UpgradeEffect::Additive,
                 quantity: 0,
                 base_cost: dec!(15),
@@ -209,7 +209,7 @@ impl GameState {
             },
             Upgrade {
                 generator_id: GeneratorID::AutoClicker,
-                name: String::from("Multiplier"),
+                name: String::from("AutoScooper: Increase Scooped Amount"),
                 effect: UpgradeEffect::Multiplicative,
                 quantity: 0,
                 base_cost: dec!(30),
@@ -234,19 +234,22 @@ impl EventHandler for GameState {
         egui::SidePanel::right("Upgrades panel")
             .min_width(300.0)
             .show(&gui_ctx, |ui| {
-                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                    ui.heading("Upgrades");
-                    let clicker_upgrade = self
-                        .upgrades
-                        .iter()
-                        .filter(|x| x.check_intended_generator() == GeneratorID::Clicker);
-                    
+                ui.heading("Upgrades");
+                ui.with_layout(egui::Layout::top_down(egui::Align::LEFT), |ui| {
+                    for i in &self.upgrades {
+                        ui.label(i.check_name());
+                        ui.horizontal(|ui| {
+                            ui.label("Cost:");
+                            ui.label(i.check_cost().to_string());
+                            ui.label("Electrons")
+                        });
+                    }
                 });
             });
 
         egui::CentralPanel::default().show(&gui_ctx, |ui| {
             ui.vertical(|ui| {
-                ui.heading("Collect Money");
+                ui.heading("Electrons");
                 ui.label(self.resource_manager.electron_quantity().to_string());
                 if ui.button("Click").clicked() {
                     self.resource_manager.clicker_increment();
@@ -286,16 +289,11 @@ impl EventHandler for GameState {
 }
 
 fn main() {
-    // Make a Context.
-    let (mut ctx, event_loop) = ContextBuilder::new("my_game", "Cool Game Author")
+    let (mut ctx, event_loop) = ContextBuilder::new("ElementIdle", "AcarPDX")
         .build()
-        .expect("aieee, could not create ggez context!");
+        .expect("Could not create a game instant (context)");
 
-    // Create an instance of your event handler.
-    // Usually, you should provide it with the Context object to
-    // use when setting your game up.
     let my_game = GameState::new(&mut ctx);
 
-    // Run!
     event::run(ctx, event_loop, my_game);
 }
